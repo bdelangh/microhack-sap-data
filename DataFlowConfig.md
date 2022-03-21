@@ -191,6 +191,30 @@ This dataset will act as the source.
 
 > Note : the source code of the CDS View can be found [here](scripts/zbd_i_salesdocument_e.asddls)
 
+## Create a Datalake Directory to store the SalesOrderHeaders
+* This directory will contain the SalesOrder Header parquet file
+* Switch to the `Data` View and select `Linked`
+* Select `Azure Data Lake Storage Gen2`
+* Locate the Synapse Data Lake
+* Select `sap-data-adls`
+* Use `+New Folder` to create a new directory
+
+<img src="images/synapsews/DFexportDirectory.png">
+
+## Create a Integration DataSet for the SalesOrderHeaders parquet file
+* this data set will the exported SalesOrderHeaders
+* Select your Folder and use the `New integration dataset button`
+
+<img src="images/synapsews/DFNewIntegrationDS.png">
+
+
+* use Format `Parquet`
+* Give a name for your dataset
+* use the Synapse DataLake as linked service
+* use `sap-data-adls/SalesOrderHeadersExport/SalesOrderHeadersExp.parquet`as `File Path`
+
+<img src="images/synapsews/DFexportDataSet.png">
+
 ## Create a Linked Service to the Synapse SQL Pool
 * this will represent the target/sink of the pipeline
 
@@ -236,34 +260,9 @@ This dataset will act as the `sink` in our pipeline.
 
 <img src="images/synapsews/RFCCopyActionSource.jpg">
 
-* In the `sink` tab, select the Synapse Sales Order Dataset as the sink
+* In the `sink` tab, select the Dataset representing the `SalesOrderHeaderParquet` file
 
-<img src="images/synapsews/RFCCopyActionSink.jpg">
-
->Note : Ensure to select `PolyBase`
-
-* In the mapping tab, select `Import schemas`. Since source and target fields have the same name, the system can auto-generate the mapping
-
-<img src="images/synapsews/rfcMapping.jpg">
-
-* For the prediction model we will calculate the offset between the billing document date and the actual payment data. For this we need to have these date fields mapped to SQL Date fields. Therefore, go to the JSON Code for the pipeline and add `convertDateToDateTime` and `convertTimeToTimespan` parameters.
-
-<img src="images/synapsews/jsonCodeButton.jpg">
-
-Add the parameters `convertDateToDatetime` and `convertTimeToTimespan` at the existing `typeproperties > source` element. The resulting document should looks as follows :
-```javascript
-  "typeProperties": {
-                    "source": {
-                        "type": "SapTableSource",
-                        "partitionOption": "None",
-                        "convertDateToDatetime": true,
-                        "convertTimeToTimespan": true
-                    },
-                    "sink": { 
-                        ...
-```
-<!-- >>Note : if these parameters are not entered correctly the date fields will remain as a String format. -->
-<!-- Note : these are internal parameters!!! -->
+<img src="images/synapsews/DFPipelineSOHeaderParqSink.png">
 
 * In the `Settings` blade, `enable staging` and create create a Linked Service pointing to the Data Lake attached to your Synapse.
 
@@ -273,21 +272,114 @@ Add the parameters `convertDateToDatetime` and `convertTimeToTimespan` at the ex
 
 <img src="images/synapsews/staging.jpg" height=400>
 
-* publish and trigger the pipeline, use `Add trigger` -> `Trigger now`
+* Publish and trigger the pipeline, use `Add trigger` -> `Trigger now`
 
 <img src="images/synapsews/syn7.jpg" height=200>
 
 <img src="images/synapsews/triggerNow.jpg">
 
-* Swith to the `Monitor`view to monitor the pipeline run
+* Switch to the `Monitor`view to monitor the pipeline run
 
 <img src="images/synapsews/pipelineMonitor.jpg">
+
+* Switch to the `Data` view. In your DataLake export directory, you should find the exported Parquet file.
+
+<img src="images/synapsews/DFParquetExportFile.png">
+
+## Create DataFlow to convert the SalesOrderHeaders
+### Step 1 : Read the Exported Sales Order Headers
+We will now create a Dataflow which will do some conversions on the exported SalesOrderHeaders before importing these into Synapse.
+* Switch to the `Development` View
+* Create a new `DataFlow`
+
+<img src="images/synapsews/DFAddDataFlow.png">
+
+* Provide a name for your DatFlow, eg. `ConvertSalesOrderHeaders`
+* Use `Add Source`
+* Use the dataset which contains the exported SalesOrderHeaders
+
+<img src="images/synapsews/DFStep1SourceSettings.png">
+
+* Turn on `DateFlow` debug, once turned on you can continue
+
+<img src="images/synapsews/DFTurnOnDebug.png">
+
+>Note: This can take a couple of minutes
+
+* Under `Projection`, import the schema from the Parquet file
+
+<img src="images/synapsews/DFImportProjection.png">
+
+* Under `Data Preview`, press `Refresh` to see the data from the Parquet file
+
+<img src="images/synapsews/DFStep1DataPreview>
+
+
+### Step 2 : Convert the SalesOrderHeaderS
+* Add a `Derived Column` step
+
+<img src="images/synapsews/DFAddDerivedColumn.png">
+
+* Provide a name for the output stream
+* verify the input = out of the previous step
+* Add `Derived Columns` using the formulas beneath. This formulas will convert the SAP Date format (yyyyMMdd) to a SQL Date.
+
+```
+CREATIONDATE = toDate(CREATIONDATE, "yyyyMMdd")
+PRICINGDATE = toDate(PRICINGDATE, "yyyyMMdd")
+BILLINGDOCUMENTDATE = toDate(BILLINGDOCUMENTDATE, "yyyyMMdd")
+LASTCHANGEDATE = toDate(LASTCHANGEDATE, "yyyyMMdd")
+MANDT = toInteger(MANDT)
+CREATIONTIME = toTimestamp(concatWS(" ", CREATIONDATE, CREATIONTIME), "yyyyMMdd HHmmss")
+
+```
+
+<img src="images/synapsews/DFDerivedColumns.png">
+
+* Use `Date Preview` to check if the conversion is executed successfully
+
+<img src="images/synapsews/DFStep2DataPreviewDates.png">
+
+### Step 3 : Add a Sink
+
+<img src="images/synapsews/DFAddSink.png">
+
+* Provide a name for the Output stream, eg. SynSalesOrderHeaders
+* Point the Sink Dataset to the Synapse Dataset for the SalesOrderHeaders
+
+<img src="images/synapsews/DFSink.png">
+
+* Verify the `Mapping`
+
+<img src="images/synapsews/DFMapping.png">
+
+## Add DataFlow to the Extraction Pipeline
+* Return to your SalesOrderHeaders extraction pipeline
+* Add a additional `DataFlow`step
+
+<img src="images/synapsews/DFPipelineAddDataFlow.png">
+
+* Connect the `Copy Date` step with the `Data Flow` step
+
+<img src="images/synapsews/DFPipelineConnect.png">
+
+* In the DataFlow step, select `Settings` and point to the previously created DataFlow.
+* Enable `Staging` and point to your Staging directory on the Data Lake 
+
+<img src="images/synapsews/DFDataFlowSettings.png">
+
+* The SalesOrderHeaders pipeline is now complete. Publish and trigger the pipeline by using `Add trigger` -> `Trigger now`
 
 * Check the result in Synapse using SQL. You can do this via the `Develop` view and create a new SQL script.
 
 ```sql
 select count(*) from SalesOrderHeaders
 select * from SalesOrderHeaders
+```
+
+>Note : you can remove entries from SalesOderHeaders using the following SQL command
+```sql
+truncate table SalesOrderHeaders
 ```
 
 ## Implement the SalesOrderItems Pipeline

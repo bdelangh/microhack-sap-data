@@ -82,10 +82,28 @@ Open `Internet Explorer` on the GW VM and use the recommended settings. The SAP 
 
 <img src="images/gw/vm-gw6.jpg" height=300>
  
- * Finally press `Next` 
+ * Finally press `Next`
 
 <img src="images/gw/vm-gw-connsetup3.png" height=300>
 
 * Again press `Next` and choose `Close`
 
-The installation of the SAP .Net Connector is complete, continue to the [next](SynapseWorkspace.md) step.
+The installation of the SAP .Net Connector is complete.
+
+### Install Java Runtime environment
+The Java Runtime environment is required when using the Parquet format. We'll be using the [Microsoft Build of OpenJDK](https://www.microsoft.com/openjdk).
+You can download the latest version from [Download the Microsoft Build of OpenJDK](https://docs.microsoft.com/en-us/java/openjdk/download).
+<!-- version used at testing OpenJDK 17.0.2 LTS : https://download.visualstudio.microsoft.com/download/pr/9b41bfa3-0cc3-4830-aef4-5b861199d54d/c30c8279b083c2fe50ab70e2d0def72a/microsoft-jdk-17.0.2.8.1-windows-x64.msi> -->
+
+* Execute the download from the browser on you Gateway VM
+* Follow the installation procedure
+* Ensure to enable `Set JAVA_HOME`
+
+<img src="images/gw/DFSetJavaHome.png">
+
+* Test the java installation in a terminal
+```
+java -version
+```
+
+The installation of the JAva Runtime is complete, continue to the [next](SynapseWorkspace.md) step.
